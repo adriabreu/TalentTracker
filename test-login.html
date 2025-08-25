@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TalentTracker - Teste de Login</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      background-color: #f5f7fa;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    .container {
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 400px;
+      padding: 2rem;
+    }
+    h1 {
+      color: #2c3e50;
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    .form-group {
+      margin-bottom: 1rem;
+    }
+    label {
+      display: block;
+      margin-bottom: 0.5rem;
+      color: #566573;
+      font-weight: 500;
+    }
+    input {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #dce4ec;
+      border-radius: 4px;
+      font-size: 1rem;
+      box-sizing: border-box;
+    }
+    button {
+      background-color: #3498db;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 0.75rem 1rem;
+      font-size: 1rem;
+      cursor: pointer;
+      width: 100%;
+      font-weight: 500;
+      transition: background-color 0.2s;
+    }
+    button:hover {
+      background-color: #2980b9;
+    }
+    .status {
+      margin-top: 1rem;
+      padding: 1rem;
+      border-radius: 4px;
+    }
+    .success {
+      background-color: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    .error {
+      background-color: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    .user-info {
+      background-color: #e8f4f8;
+      padding: 1rem;
+      border-radius: 4px;
+      margin-top: 1rem;
+      border: 1px solid #d1e7f0;
+    }
+    .user-info h3 {
+      margin-top: 0;
+      color: #2874a6;
+    }
+    .action-buttons {
+      margin-top: 1rem;
+      display: flex;
+      gap: 0.5rem;
+    }
+    .action-buttons button.secondary {
+      background-color: #95a5a6;
+    }
+    .action-buttons button.secondary:hover {
+      background-color: #7f8c8d;
+    }
+    .action-buttons button.danger {
+      background-color: #e74c3c;
+    }
+    .action-buttons button.danger:hover {
+      background-color: #c0392b;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>TalentTracker</h1>
+    <div id="login-form">
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" placeholder="seu@email.com" value="test@example.com">
+      </div>
+      <div class="form-group">
+        <label for="password">Senha</label>
+        <input type="password" id="password" placeholder="Sua senha" value="password123">
+      </div>
+      <button id="login-button">Entrar</button>
+      <div id="login-status" class="status" style="display: none;"></div>
+    </div>
+
+    <div id="user-panel" style="display: none;">
+      <div class="user-info">
+        <h3>Informações do Usuário</h3>
+        <div id="user-details"></div>
+      </div>
+      <div class="action-buttons">
+        <button id="check-status-button" class="secondary">Verificar Status</button>
+        <button id="logout-button" class="danger">Sair</button>
+      </div>
+      <div id="user-status" class="status" style="display: none;"></div>
+    </div>
+  </div>
+
+  <script>
+    // Configurações da API
+    const API_URL = 'http://localhost:3001/api';
+    const TOKEN_KEY = 'auth_token';
+    
+    // Referências aos elementos DOM
+    const loginForm = document.getElementById('login-form');
+    const userPanel = document.getElementById('user-panel');
+    const loginButton = document.getElementById('login-button');
+    const logoutButton = document.getElementById('logout-button');
+    const checkStatusButton = document.getElementById('check-status-button');
+    const loginStatus = document.getElementById('login-status');
+    const userStatus = document.getElementById('user-status');
+    const userDetails = document.getElementById('user-details');
+    
+    // Verificar se já existe um token salvo
+    checkAuthentication();
+    
+    // Event Listeners
+    loginButton.addEventListener('click', handleLogin);
+    logoutButton.addEventListener('click', handleLogout);
+    checkStatusButton.addEventListener('click', checkCurrentUser);
+    
+    // Funções de autenticação
+    async function handleLogin() {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      
+      if (!email || !password) {
+        showStatus(loginStatus, 'Por favor, preencha todos os campos.', 'error');
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${API_URL}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.message || 'Erro na autenticação');
+        }
+        
+        if (data.success) {
+          // Salvar token no localStorage
+          localStorage.setItem(TOKEN_KEY, data.accessToken);
+          
+          // Atualizar UI
+          showStatus(loginStatus, 'Login realizado com sucesso!', 'success');
+          setTimeout(() => {
+            updateUI(data.user);
+          }, 1000);
+        } else {
+          throw new Error(data.message || 'Falha na autenticação');
+        }
+      } catch (error) {
+        showStatus(loginStatus, `Erro: ${error.message}`, 'error');
+      }
+    }
+    
+    async function handleLogout() {
+      try {
+        const token = localStorage.getItem(TOKEN_KEY);
+        
+        if (!token) {
+          throw new Error('Você não está autenticado');
+        }
+        
+        const response = await fetch(`${API_URL}/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.message || 'Erro ao fazer logout');
+        }
+        
+        // Limpar token
+        localStorage.removeItem(TOKEN_KEY);
+        
+        // Atualizar UI
+        showStatus(userStatus, 'Logout realizado com sucesso!', 'success');
+        setTimeout(() => {
+          loginForm.style.display = 'block';
+          userPanel.style.display = 'none';
+          loginStatus.style.display = 'none';
+        }, 1000);
+      } catch (error) {
+        showStatus(userStatus, `Erro: ${error.message}`, 'error');
+      }
+    }
+    
+    async function checkCurrentUser() {
+      try {
+        const token = localStorage.getItem(TOKEN_KEY);
+        
+        if (!token) {
+          throw new Error('Você não está autenticado');
+        }
+        
+        const response = await fetch(`${API_URL}/auth/me`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.message || 'Erro ao obter informações do usuário');
+        }
+        
+        showStatus(userStatus, 'Usuário autenticado!', 'success');
+        updateUserDetails(data.user);
+      } catch (error) {
+        showStatus(userStatus, `Erro: ${error.message}`, 'error');
+        if (error.message.includes('401') || error.message.includes('autenticado')) {
+          localStorage.removeItem(TOKEN_KEY);
+          loginForm.style.display = 'block';
+          userPanel.style.display = 'none';
+        }
+      }
+    }
+    
+    function checkAuthentication() {
+      const token = localStorage.getItem(TOKEN_KEY);
+      
+      if (token) {
+        // Tentar verificar o usuário atual
+        fetch(`${API_URL}/auth/me`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Sessão expirada');
+          }
+          return response.json();
+        })
+        .then(data => {
+          updateUI(data.user);
+        })
+        .catch(error => {
+          console.error('Erro ao verificar autenticação:', error);
+          localStorage.removeItem(TOKEN_KEY);
+        });
+      }
+    }
+    
+    // Funções de UI
+    function updateUI(user) {
+      if (user) {
+        loginForm.style.display = 'none';
+        userPanel.style.display = 'block';
+        updateUserDetails(user);
+      } else {
+        loginForm.style.display = 'block';
+        userPanel.style.display = 'none';
+      }
+    }
+    
+    function updateUserDetails(user) {
+      if (!user) return;
+      
+      userDetails.innerHTML = `
+        <p><strong>Nome:</strong> ${user.name || 'N/A'}</p>
+        <p><strong>Email:</strong> ${user.email || 'N/A'}</p>
+        <p><strong>Função:</strong> ${user.role || 'N/A'}</p>
+      `;
+    }
+    
+    function showStatus(element, message, type) {
+      element.textContent = message;
+      element.className = `status ${type}`;
+      element.style.display = 'block';
+    }
+  </script>
+</body>
+</html>

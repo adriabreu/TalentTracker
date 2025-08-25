@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TalentTracker - Teste de Login (Compatível com CORS)</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      background-color: #f5f7fa;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    .container {
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 400px;
+      padding: 2rem;
+    }
+    h1 {
+      color: #2c3e50;
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    .form-group {
+      margin-bottom: 1rem;
+    }
+    label {
+      display: block;
+      margin-bottom: 0.5rem;
+      color: #566573;
+      font-weight: 500;
+    }
+    input {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #dce4ec;
+      border-radius: 4px;
+      font-size: 1rem;
+      box-sizing: border-box;
+    }
+    button {
+      background-color: #3498db;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 0.75rem 1rem;
+      font-size: 1rem;
+      cursor: pointer;
+      width: 100%;
+      font-weight: 500;
+      transition: background-color 0.2s;
+    }
+    button:hover {
+      background-color: #2980b9;
+    }
+    .status {
+      margin-top: 1rem;
+      padding: 1rem;
+      border-radius: 4px;
+      word-break: break-all;
+    }
+    .success {
+      background-color: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    .error {
+      background-color: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    .info {
+      background-color: #e2f0fb;
+      color: #0c5460;
+      border: 1px solid #bee5eb;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .user-info {
+      background-color: #e8f4f8;
+      padding: 1rem;
+      border-radius: 4px;
+      margin-top: 1rem;
+      border: 1px solid #d1e7f0;
+    }
+    .user-info h3 {
+      margin-top: 0;
+      color: #2874a6;
+    }
+    .action-buttons {
+      margin-top: 1rem;
+      display: flex;
+      gap: 0.5rem;
+    }
+    .action-buttons button {
+      flex: 1;
+    }
+    .action-buttons button.secondary {
+      background-color: #95a5a6;
+    }
+    .action-buttons button.secondary:hover {
+      background-color: #7f8c8d;
+    }
+    .action-buttons button.danger {
+      background-color: #e74c3c;
+    }
+    .action-buttons button.danger:hover {
+      background-color: #c0392b;
+    }
+    #request-log {
+      margin-top: 2rem;
+      font-size: 0.9rem;
+    }
+    #request-log h4 {
+      margin-top: 0;
+      color: #7f8c8d;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>TalentTracker</h1>
+    <div id="login-form">
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" placeholder="seu@email.com" value="test@example.com">
+      </div>
+      <div class="form-group">
+        <label for="password">Senha</label>
+        <input type="password" id="password" placeholder="Sua senha" value="password123">
+      </div>
+      <button id="login-button">Entrar</button>
+      <div id="login-status" class="status" style="display: none;"></div>
+    </div>
+
+    <div id="user-panel" style="display: none;">
+      <div class="user-info">
+        <h3>Informações do Usuário</h3>
+        <div id="user-details"></div>
+      </div>
+      <div class="action-buttons">
+        <button id="check-status-button" class="secondary">Verificar Status</button>
+        <button id="logout-button" class="danger">Sair</button>
+      </div>
+      <div id="user-status" class="status" style="display: none;"></div>
+    </div>
+
+    <div id="request-log">
+      <h4>Log de Requisições</h4>
+      <div class="status info" id="log-content">
+        <pre>Aguardando operações...</pre>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Configurações da API
+    const API_URL = 'http://localhost:3001/api';
+    const TOKEN_KEY = 'auth_token';
+    
+    // Referências aos elementos DOM
+    const loginForm = document.getElementById('login-form');
+    const userPanel = document.getElementById('user-panel');
+    const loginButton = document.getElementById('login-button');
+    const logoutButton = document.getElementById('logout-button');
+    const checkStatusButton = document.getElementById('check-status-button');
+    const loginStatus = document.getElementById('login-status');
+    const userStatus = document.getElementById('user-status');
+    const userDetails = document.getElementById('user-details');
+    const logContent = document.querySelector('#log-content pre');
+    
+    // Função para adicionar entradas no log
+    function addLog(message, data = null) {
+      const timestamp = new Date().toLocaleTimeString();
+      let logMessage = `[${timestamp}] ${message}`;
+      
+      if (data) {
+        if (typeof data === 'object') {
+          logMessage += `\n${JSON.stringify(data, null, 2)}`;
+        } else {
+          logMessage += `\n${data}`;
+        }
+      }
+      
+      logContent.textContent = logMessage + '\n\n' + logContent.textContent;
+    }
+    
+    // Configuração de função fetch aprimorada com logs e tratamento de erros
+    async function apiRequest(endpoint, options = {}) {
+      const url = `${API_URL}${endpoint}`;
+      addLog(`Iniciando requisição para ${url}`, options);
+      
+      try {
+        // Definir headers padrão
+        options.headers = options.headers || {};
+        options.headers['Content-Type'] = 'application/json';
+        
+        // Se tem token, adicionar Authorization header
+        const token = localStorage.getItem(TOKEN_KEY);
+        if (token && !options.headers.Authorization) {
+          options.headers.Authorization = `Bearer ${token}`;
+          addLog('Token adicionado ao header');
+        }
+        
+        addLog(`Enviando requisição com opções:`, {
+          method: options.method || 'GET',
+          headers: options.headers
+        });
+        
+        // Adicionar timeout para requisições
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        options.signal = controller.signal;
+        
+        const response = await fetch(url, options);
+        clearTimeout(timeoutId);
+        
+        addLog(`Resposta recebida: ${response.status} ${response.statusText}`);
+        
+        let data;
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          data = await response.json();
+          addLog('Dados da resposta:', data);
+        } else {
+          data = await response.text();
+          addLog('Resposta em texto:', data.substring(0, 100) + (data.length > 100 ? '...' : ''));
+        }
+        
+        if (!response.ok) {
+          throw new Error(`${response.status} ${response.statusText}: ${JSON.stringify(data)}`);
+        }
+        
+        return data;
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          addLog('ERRO: Requisição cancelada por timeout');
+          throw new Error('Timeout da requisição');
+        }
+        
+        if (error.name === 'TypeError' && error.message.includes('NetworkError')) {
+          addLog('ERRO: Problema de rede na conexão com a API');
+        } else {
+          addLog(`ERRO na requisição: ${error.message}`);
+        }
+        
+        throw error;
+      }
+    }
+    
+    // Verificar se já existe um token salvo
+    checkAuthentication();
+    
+    // Event Listeners
+    loginButton.addEventListener('click', handleLogin);
+    logoutButton.addEventListener('click', handleLogout);
+    checkStatusButton.addEventListener('click', checkCurrentUser);
+    
+    // Testar a API abertamente para verificar conectividade
+    testApiHealth();
+    
+    // Funções de autenticação
+    async function testApiHealth() {
+      try {
+        addLog('Verificando status da API...');
+        
+        // Usando XMLHttpRequest para maior compatibilidade
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', `${API_URL}/health`, true);
+        
+        xhr.onload = function() {
+          if (xhr.status === 200) {
+            let response;
+            try {
+              response = JSON.parse(xhr.responseText);
+              addLog('API está funcionando corretamente!', response);
+            } catch (e) {
+              addLog('API respondeu, mas não em formato JSON:', xhr.responseText.substring(0, 100));
+            }
+          } else {
+            addLog(`API respondeu com status ${xhr.status}:`, xhr.responseText);
+          }
+        };
+        
+        xhr.onerror = function() {
+          addLog('ERRO: Não foi possível conectar à API');
+        };
+        
+        xhr.send();
+      } catch (error) {
+        addLog(`ERRO ao verificar saúde da API: ${error.message}`);
+      }
+    }
+    
+    async function handleLogin() {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      
+      addLog(`Tentando login para ${email}`);
+      
+      if (!email || !password) {
+        showStatus(loginStatus, 'Por favor, preencha todos os campos.', 'error');
+        return;
+      }
+      
+      try {
+        // Usando XMLHttpRequest em vez de fetch para maior compatibilidade com CORS
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_URL}/auth/login`, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        
+        xhr.onload = function() {
+          if (xhr.status === 200) {
+            try {
+              const data = JSON.parse(xhr.responseText);
+              addLog('Login bem-sucedido!', data);
+              
+              // Salvar token
+              localStorage.setItem(TOKEN_KEY, data.accessToken);
+              
+              // Atualizar UI
+              showStatus(loginStatus, 'Login realizado com sucesso!', 'success');
+              setTimeout(() => {
+                updateUI(data.user);
+              }, 1000);
+            } catch (e) {
+              addLog(`Erro ao processar resposta: ${e.message}`);
+              showStatus(loginStatus, `Erro ao processar resposta: ${e.message}`, 'error');
+            }
+          } else {
+            let errorMsg = 'Falha na autenticação';
+            try {
+              const errorData = JSON.parse(xhr.responseText);
+              errorMsg = errorData.message || errorMsg;
+            } catch (e) {}
+            
+            addLog(`Erro de login: ${xhr.status} - ${errorMsg}`);
+            showStatus(loginStatus, `Erro: ${errorMsg}`, 'error');
+          }
+        };
+        
+        xhr.onerror = function() {
+          addLog('ERRO na requisição de login - possível problema CORS');
+          showStatus(loginStatus, 'Erro de conexão - possível problema CORS', 'error');
+        };
+        
+        const payload = JSON.stringify({ email, password });
+        addLog('Enviando dados de login', { email, password: '******' });
+        xhr.send(payload);
+      } catch (error) {
+        addLog(`ERRO ao processar login: ${error.message}`);
+        showStatus(loginStatus, `Erro: ${error.message}`, 'error');
+      }
+    }
+    
+    async function handleLogout() {
+      const token = localStorage.getItem(TOKEN_KEY);
+      addLog('Iniciando processo de logout');
+      
+      if (!token) {
+        addLog('Nenhum token encontrado para logout');
+        showStatus(userStatus, 'Você não está autenticado', 'error');
+        return;
+      }
+      
+      try {
+        // Usando XMLHttpRequest em vez de fetch para maior compatibilidade com CORS
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_URL}/auth/logout`, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        
+        xhr.onload = function() {
+          if (xhr.status === 200) {
+            try {
+              const data = JSON.parse(xhr.responseText);
+              addLog('Logout bem-sucedido!', data);
+              
+              // Limpar token
+              localStorage.removeItem(TOKEN_KEY);
+              
+              // Atualizar UI
+              showStatus(userStatus, 'Logout realizado com sucesso!', 'success');
+              setTimeout(() => {
+                loginForm.style.display = 'block';
+                userPanel.style.display = 'none';
+                loginStatus.style.display = 'none';
+              }, 1000);
+            } catch (e) {
+              addLog(`Erro ao processar resposta de logout: ${e.message}`);
+            }
+          } else {
+            addLog(`Erro no logout: ${xhr.status}`, xhr.responseText);
+            
+            // Mesmo com erro, limpar token e UI
+            localStorage.removeItem(TOKEN_KEY);
+            showStatus(userStatus, 'Falha no logout, mas sessão limpa localmente', 'error');
+            setTimeout(() => {
+              loginForm.style.display = 'block';
+              userPanel.style.display = 'none';
+            }, 1000);
+          }
+        };
+        
+        xhr.onerror = function() {
+          addLog('ERRO na requisição de logout - possível problema CORS');
+          // Mesmo com erro, limpar localmente
+          localStorage.removeItem(TOKEN_KEY);
+          loginForm.style.display = 'block';
+          userPanel.style.display = 'none';
+        };
+        
+        xhr.send();
+      } catch (error) {
+        addLog(`ERRO ao processar logout: ${error.message}`);
+        // Mesmo com erro, limpar localmente
+        localStorage.removeItem(TOKEN_KEY);
+        loginForm.style.display = 'block';
+        userPanel.style.display = 'none';
+      }
+    }
+    
+    async function checkCurrentUser() {
+      const token = localStorage.getItem(TOKEN_KEY);
+      addLog('Verificando usuário atual');
+      
+      if (!token) {
+        addLog('Nenhum token encontrado');
+        showStatus(userStatus, 'Você não está autenticado', 'error');
+        return;
+      }
+      
+      try {
+        // Usando XMLHttpRequest em vez de fetch para maior compatibilidade com CORS
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', `${API_URL}/auth/me`, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        
+        xhr.onload = function() {
+          if (xhr.status === 200) {
+            try {
+              const data = JSON.parse(xhr.responseText);
+              addLog('Dados do usuário obtidos com sucesso', data);
+              
+              showStatus(userStatus, 'Usuário autenticado!', 'success');
+              updateUserDetails(data.user);
+            } catch (e) {
+              addLog(`Erro ao processar resposta: ${e.message}`);
+              showStatus(userStatus, `Erro ao processar resposta: ${e.message}`, 'error');
+            }
+          } else {
+            let errorMsg = 'Falha ao obter dados do usuário';
+            try {
+              const errorData = JSON.parse(xhr.responseText);
+              errorMsg = errorData.message || errorMsg;
+            } catch (e) {}
+            
+            addLog(`Erro ao verificar usuário: ${xhr.status} - ${errorMsg}`);
+            
+            if (xhr.status === 401) {
+              localStorage.removeItem(TOKEN_KEY);
+              loginForm.style.display = 'block';
+              userPanel.style.display = 'none';
+            }
+            
+            showStatus(userStatus, `Erro: ${errorMsg}`, 'error');
+          }
+        };
+        
+        xhr.onerror = function() {
+          addLog('ERRO na requisição de verificação - possível problema CORS');
+          showStatus(userStatus, 'Erro de conexão - possível problema CORS', 'error');
+        };
+        
+        xhr.send();
+      } catch (error) {
+        addLog(`ERRO ao verificar usuário: ${error.message}`);
+        showStatus(userStatus, `Erro: ${error.message}`, 'error');
+      }
+    }
+    
+    function checkAuthentication() {
+      const token = localStorage.getItem(TOKEN_KEY);
+      addLog('Verificando autenticação existente');
+      
+      if (token) {
+        addLog('Token encontrado, verificando validade');
+        
+        // Usando XMLHttpRequest em vez de fetch para maior compatibilidade com CORS
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', `${API_URL}/auth/me`, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        
+        xhr.onload = function() {
+          if (xhr.status === 200) {
+            try {
+              const data = JSON.parse(xhr.responseText);
+              addLog('Sessão existente válida', data);
+              updateUI(data.user);
+            } catch (e) {
+              addLog(`Erro ao processar resposta de verificação: ${e.message}`);
+              localStorage.removeItem(TOKEN_KEY);
+            }
+          } else {
+            addLog(`Sessão inválida: ${xhr.status}`, xhr.responseText);
+            localStorage.removeItem(TOKEN_KEY);
+          }
+        };
+        
+        xhr.onerror = function() {
+          addLog('ERRO na verificação inicial - possível problema CORS');
+        };
+        
+        xhr.send();
+      } else {
+        addLog('Nenhum token encontrado, usuário não está autenticado');
+      }
+    }
+    
+    // Funções de UI
+    function updateUI(user) {
+      if (user) {
+        loginForm.style.display = 'none';
+        userPanel.style.display = 'block';
+        updateUserDetails(user);
+      } else {
+        loginForm.style.display = 'block';
+        userPanel.style.display = 'none';
+      }
+    }
+    
+    function updateUserDetails(user) {
+      if (!user) return;
+      
+      userDetails.innerHTML = `
+        <p><strong>Nome:</strong> ${user.name || 'N/A'}</p>
+        <p><strong>Email:</strong> ${user.email || 'N/A'}</p>
+        <p><strong>Função:</strong> ${user.role || 'N/A'}</p>
+      `;
+    }
+    
+    function showStatus(element, message, type) {
+      element.textContent = message;
+      element.className = `status ${type}`;
+      element.style.display = 'block';
+      
+      addLog(`Status atualizado: ${message} (${type})`);
+    }
+  </script>
+</body>
+</html>
